@@ -33,7 +33,8 @@ if [ $? -eq 0 ]; then
 		--unzip \
 		--originaltime \
 		--fileprefix \
-		--desc
+		--desc \
+		--exitondup
 fi
 
 popd > /dev/null
