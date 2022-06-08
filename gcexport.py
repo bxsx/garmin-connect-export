@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 """
@@ -18,9 +18,6 @@ Activity & event types:
     https://connect.garmin.com/modern/main/js/properties/event_types/event_types.properties
     https://connect.garmin.com/modern/main/js/properties/activity_types/activity_types.properties
 """
-
-# this avoids different pylint behaviour for python 2 and 3
-from __future__ import print_function
 
 from datetime import datetime, timedelta, tzinfo
 from getpass import getpass
@@ -44,28 +41,19 @@ import zipfile
 
 from filtering import update_download_stats, read_exclude
 
-python3 = sys.version_info.major == 3
-if python3:
-    import http.cookiejar
-    import urllib.error
-    import urllib.parse
-    import urllib.request
-    import urllib
-    from urllib.parse import urlencode
-    from urllib.request import Request, HTTPError, URLError
+import http.cookiejar
+import urllib.error
+import urllib.parse
+import urllib.request
+import urllib
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
+from urllib.request import Request
 
-    COOKIE_JAR = http.cookiejar.CookieJar()
-    OPENER = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(COOKIE_JAR), urllib.request.HTTPSHandler(debuglevel=0))
-else:
-    import cookielib
-    import urllib2
-    from urllib import urlencode
-    from urllib2 import Request, HTTPError, URLError
+COOKIE_JAR = http.cookiejar.CookieJar()
+OPENER = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(COOKIE_JAR), urllib.request.HTTPSHandler(debuglevel=0))
 
-    COOKIE_JAR = cookielib.CookieJar()
-    OPENER = urllib2.build_opener(urllib2.HTTPCookieProcessor(COOKIE_JAR), urllib2.HTTPSHandler(debuglevel=0))
-
-SCRIPT_VERSION = '3.3.0'
+SCRIPT_VERSION = '4.0.0-Beta'
 
 # this is almost the datetime format Garmin used in the activity-search-service
 # JSON 'display' fields (Garmin didn't zero-pad the date and the hour, but %d and %H do)
@@ -204,9 +192,8 @@ def write_to_file(filename, content, mode='w', file_time=None):
     Helper function that persists content to a file.
 
     :param filename:     name of the file to write
-    :param content:      content to write; with Python 2 always of type 'str',
-                         with Python 3 it can be 'bytes' or 'str'. If it's
-                         'bytes' and the mode 'w', it will be converted/decoded
+    :param content:      content to write; can be 'bytes' or 'str'.
+                         If it's 'bytes' and the mode 'w', it will be converted/decoded
     :param mode:         'w' or 'wb'
     :param file_time:    if given use as timestamp for the file written (in seconds since 1970-01-01)
     """
@@ -231,7 +218,7 @@ def http_req(url, post=None, headers=None):
     :param url:          URL for the request
     :param post:         dictionary of POST parameters
     :param headers:      dictionary of headers
-    :return: response body (type 'str' with Python 2, type 'bytes' with Python 3
+    :return: response body (type 'bytes')
     """
     request = Request(url)
     # Tell Garmin we're some supported browser.
@@ -239,16 +226,11 @@ def http_req(url, post=None, headers=None):
         like Gecko) Chrome/54.0.2816.0 Safari/537.36')
     request.add_header('nk', 'NT')  # necessary since 2021-02-23 to avoid http error code 402
     if headers:
-        if python3:
-            for header_key, header_value in headers.items():
-                request.add_header(header_key, header_value)
-        else:
-            for header_key, header_value in headers.iteritems():
-                request.add_header(header_key, header_value)
+        for header_key, header_value in headers.items():
+            request.add_header(header_key, header_value)
     if post:
         post = urlencode(post)  # Convert dictionary to POST parameter string.
-        if python3:
-            post = post.encode("utf-8")
+        post = post.encode("utf-8")
     start_time = timer()
     try:
         response = OPENER.open(request, data=post)
@@ -283,10 +265,7 @@ def http_req(url, post=None, headers=None):
 
 def http_req_as_string(url, post=None, headers=None):
     """Helper function that makes the HTTP requests, returning a string instead of bytes."""
-    if python3:
-        return http_req(url, post, headers).decode()
-    else:
-        return http_req(url, post, headers)
+    return http_req(url, post, headers).decode()
 
 
 # idea stolen from https://stackoverflow.com/a/31852401/3686
@@ -356,20 +335,17 @@ class FixedOffset(tzinfo):
     """Fixed offset in minutes east from UTC."""
 
     def __init__(self, offset, name):
-        super(FixedOffset, self).__init__()
+        super().__init__()
         self.__offset = timedelta(minutes=offset)
         self.__name = name
 
     def utcoffset(self, dt):
-        del dt # unused
         return self.__offset
 
     def tzname(self, dt):
-        del dt # unused
         return self.__name
 
     def dst(self, dt):
-        del dt # unused
         return timedelta(0)
 
 
@@ -413,10 +389,7 @@ def epoch_seconds_from_summary(summary):
         return summary['beginTimestamp'] // 1000
     elif present('startTimeLocal', summary) and present('startTimeGMT', summary):
         dt = offset_date_time(summary['startTimeLocal'], summary['startTimeGMT'])
-        # with Python 3 this can be simplified to datetime.timestamp()
-        utc = FixedOffset(0, "UTC")
-        seconds = (dt - datetime(1970, 1, 1, tzinfo = utc)).total_seconds()
-        return int(seconds)
+        return int(dt.timestamp())
     else:
         logging.info('No timestamp found in activity %s', summary['activityId'])
         return None
@@ -442,7 +415,7 @@ def pace_or_speed_formatted(type_id, parent_type_id, mps):
     return "{0:.1f}".format(round(kmh, 1))
 
 
-class CsvFilter(object):
+class CsvFilter:
     """Collects, filters and writes CSV."""
 
     def __init__(self, csv_file, csv_header_properties):
@@ -472,11 +445,7 @@ class CsvFilter(object):
         the record prepared for the next write_row call
         """
         if value and name in self.__csv_columns:
-            if python3:
-                self.__current_row[self.__csv_headers[name]] = value
-            else:
-                # must encode in UTF-8 because the Python 2 'csv' module doesn't support unicode
-                self.__current_row[self.__csv_headers[name]] = value.encode('utf8')
+            self.__current_row[self.__csv_headers[name]] = value
 
     def is_column_active(self, name):
         """Return True if the column is present in the header template"""
@@ -510,9 +479,11 @@ def parse_arguments(argv):
         help="export format; can be 'gpx', 'tcx', 'original' or 'json' (default: 'gpx')")
     parser.add_argument('-d', '--directory', default=activities_directory,
         help='the directory to export to (default: \'./YYYY-MM-DD_garmin_connect_export\')')
-    parser.add_argument('-s', "--subdir",
-        help="the subdirectory for activity files (tcx, gpx etc.), supported placeholders are {YYYY} and {MM}"
-                        " (default: export directory)" )
+    parser.add_argument('-s', '--subdir',
+        help='the subdirectory for activity files (tcx, gpx etc.), supported placeholders are {YYYY} and {MM}'
+                        ' (default: export directory)')
+    parser.add_argument('-lp', '--logpath',
+        help='the directory to store logfiles (default: same as for --directory')
     parser.add_argument('-u', '--unzip', action='store_true',
         help='if downloading ZIP files (format: \'original\'), unzip the file and remove the ZIP file')
     parser.add_argument('-ot', '--originaltime', action='store_true',
@@ -522,12 +493,12 @@ def parse_arguments(argv):
     parser.add_argument('-t', '--template', default=CSV_TEMPLATE,
         help='template file with desired columns for CSV output')
     parser.add_argument('-fp', '--fileprefix', action='count', default=0,
-        help="set the local time as activity file name prefix")
+        help='set the local time as activity file name prefix')
     parser.add_argument('-sa', '--start_activity_no', type=int, default=1,
-        help="give index for first activity to import, i.e. skipping the newest activities")
-    parser.add_argument('-ex', '--exclude', metavar="FILE",
-        help="Json file with Array of activity IDs to exclude from download. "
-                        "Format example: {\"ids\": [\"6176888711\"]}")
+        help='give index for first activity to import, i.e. skipping the newest activities')
+    parser.add_argument('-ex', '--exclude', metavar='FILE',
+        help='JSON file with Array of activity IDs to exclude from download. '
+                        'Format example: {"ids": ["6176888711"]}')
     parser.add_argument('-x', '--exitondup', action='store_true',
         help="Stop further downloads after the first duplicate file occurs")
 
@@ -538,10 +509,7 @@ def login_to_garmin_connect(args):
     """
     Perform all HTTP requests to login to Garmin Connect.
     """
-    if python3:
-        username = args.username if args.username else input('Username: ')
-    else:
-        username = args.username if args.username else raw_input('Username: ')
+    username = args.username if args.username else input('Username: ')
     password = args.password if args.password else getpass()
 
     logging.debug("Login params: %s", urlencode(DATA))
@@ -929,10 +897,14 @@ def export_data_file(activity_id, activity_details, args, file_time, append_desc
             os.remove(data_filename)
 
 
-def setup_logging():
+def setup_logging(args):
     """Setup logging"""
+    logpath = args.logpath if args.logpath else args.directory
+    if not os.path.isdir(logpath):
+        os.makedirs(logpath)
+
     logging.basicConfig(
-        filename='gcexport.log',
+        filename = os.path.join(logpath, 'gcexport.log'),
         level=logging.DEBUG,
         format='%(asctime)s [%(levelname)-7.7s] %(message)s'
     )
@@ -1168,14 +1140,14 @@ def main(argv):
     """
     Main entry point for gcexport.py
     """
-    setup_logging()
-    logging.info("Starting %s version %s, using Python version %s", argv[0], SCRIPT_VERSION, python_version())
     args = parse_arguments(argv)
+    setup_logging(args)
+    logging.info("Starting %s version %s, using Python version %s", argv[0], SCRIPT_VERSION, python_version())
     logging_verbosity(args.verbosity)
 
     print('Welcome to Garmin Connect Exporter!')
 
-    if not python3:
+    if sys.version_info.major < 3:
         print('Please upgrade to Python 3.x, version', python_version(), 'isn\'t supported anymore, see https://github.com/pe-st/garmin-connect-export/issues/64')
         sys.exit(1)
 
@@ -1200,10 +1172,7 @@ def main(argv):
     csv_filename = args.directory + '/activities.csv'
     csv_existed = os.path.isfile(csv_filename)
 
-    if python3:
-        csv_file = open(csv_filename, mode='a', encoding='utf-8')
-    else:
-        csv_file = open(csv_filename, 'a')
+    csv_file = open(csv_filename, mode='a', encoding='utf-8')
     csv_filter = CsvFilter(csv_file, args.template)
 
     # Write header to CSV file
