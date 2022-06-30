@@ -26,7 +26,7 @@ if [ ! -z $BRANCH ]; then
 fi
 
 if [ $? -eq 0 ]; then
-	./gcexport-bw.sh \
+	python3 gcexport.py \
 		--directory $TARGET \
 		--count all \
 		--format original \
@@ -34,7 +34,8 @@ if [ $? -eq 0 ]; then
 		--originaltime \
 		--fileprefix \
 		--desc \
-		--exitondup
+		--exitondup \
+		--bitwarden
 fi
 
 popd > /dev/null
