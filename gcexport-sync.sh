@@ -35,7 +35,7 @@ if [ $? -eq 0 ]; then
 		--fileprefix \
 		--desc \
 		--exitondup \
-		--bitwarden
+		--passmanager 'BitWarden'
 fi
 
 popd > /dev/null
